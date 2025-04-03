@@ -131,7 +131,15 @@ if uploaded_file is not None:
         elif filter_type == "Bilateral":
             processed_image = bilateral_filter(image)
     
-    st.image(processed_image, caption="Processed Image", use_container_width=True)
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.image(image, caption="Uploaded Image", use_column_width=True)
+    
+    with col2:
+        if 'processed_image' in locals():
+            st.image(processed_image, caption="Processed Image", use_column_width=True)
+
 
 # Footer
 st.markdown("""
