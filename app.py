@@ -2,6 +2,7 @@ import streamlit as st
 import cv2
 import numpy as np
 from PIL import Image
+import io
 
 def adjust_brightness(image, value):
     return cv2.convertScaleAbs(image, alpha=1, beta=value)
@@ -10,7 +11,7 @@ def adjust_contrast(image, alpha):
     return cv2.convertScaleAbs(image, alpha=alpha, beta=0)
 
 def apply_histogram_equalization(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     return cv2.equalizeHist(gray)
 
 def apply_sharpening(image):
@@ -39,19 +40,26 @@ def shear_image(image, shear_x, shear_y):
     return cv2.warpAffine(image, M, (w, h))
 
 def convert_grayscale(image):
-    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
 def apply_threshold(image, threshold):
-    _, binary_image = cv2.threshold(image, threshold, 255, cv2.THRESH_BINARY)
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    _, binary_image = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
     return binary_image
 
 def apply_color_filter(image, lower, upper):
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    hsv = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, lower, upper)
     return cv2.bitwise_and(image, image, mask=mask)
 
 def convert_color_space(image, code):
-    return cv2.cvtColor(image, code)
+    bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    converted = cv2.cvtColor(bgr_image, code)
+    if len(converted.shape) == 3 and converted.shape[2] == 3:
+        return cv2.cvtColor(converted, cv2.COLOR_BGR2RGB)
+    else:
+        return converted
 
 def median_filter(image):
     return cv2.medianBlur(image, 5)
@@ -67,14 +75,15 @@ uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    image = np.array(image)
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    image = np.array(image.convert("RGB"))  # Keep it RGB
     st.image(image, caption="Uploaded Image", use_container_width=True)
-    
+
     operation = st.selectbox("Choose an Operation", [
         "Image Enhancement", "Geometric Transformations",
         "Color & Intensity Transformations", "Image Filtering & Noise Reduction"])
-    
+
+    processed_image = None
+
     if operation == "Image Enhancement":
         enhancement = st.selectbox("Select Enhancement", ["Brightness", "Contrast", "Sharpening", "Smoothing", "Histogram Equalization"])
         if enhancement == "Brightness":
@@ -121,7 +130,7 @@ if uploaded_file is not None:
             processed_image = apply_color_filter(image, lower, upper)
         elif color_transformation == "Color Space Conversion":
             processed_image = convert_color_space(image, cv2.COLOR_BGR2HSV)
-    
+
     elif operation == "Image Filtering & Noise Reduction":
         filter_type = st.selectbox("Select Filter", ["Median", "Gaussian", "Bilateral"])
         if filter_type == "Median":
@@ -130,15 +139,32 @@ if uploaded_file is not None:
             processed_image = gaussian_filter(image)
         elif filter_type == "Bilateral":
             processed_image = bilateral_filter(image)
-    
+
     col1, col2 = st.columns(2)
 
     with col1:
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Original Image", use_container_width=True)
 
     with col2:
-        if 'processed_image' in locals():
+        if processed_image is not None:
             st.image(processed_image, caption="Processed Image", use_container_width=True)
+
+            # Convert to PIL Image for download
+            if len(processed_image.shape) == 2:  # Grayscale
+                pil_image = Image.fromarray(processed_image)
+            else:
+                pil_image = Image.fromarray(processed_image.astype(np.uint8))
+
+            buf = io.BytesIO()
+            pil_image.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+
+            st.download_button(
+                label="📥 Download Processed Image",
+                data=byte_im,
+                file_name="processed_image.png",
+                mime="image/png"
+            )
 
 # Footer
 st.markdown("""
